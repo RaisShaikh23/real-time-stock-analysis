@@ -86,3 +86,29 @@ def get_metrics(symbol: str = "AAPL"):
         "rows": len(metrics),
         "metrics": metrics.to_dict(orient="records")
     }
+
+@router.post("/train")
+def train_models(symbol: str = "AAPL"):
+    symbol = symbol.upper()
+
+    if symbol != "AAPL":
+        raise HTTPException(
+            status_code=400,
+            detail="Currently only AAPL is supported."
+        )
+
+    try:
+        from models_store.train_final_models import main as train_final_models
+
+        train_final_models()
+
+        return {
+            "status": "success",
+            "message": f"Models trained successfully for {symbol}."
+        }
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Model training failed: {str(error)}"
+        )
