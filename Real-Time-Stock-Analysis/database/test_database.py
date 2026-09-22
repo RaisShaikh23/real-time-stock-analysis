@@ -1,92 +1,41 @@
-import os
-import sqlite3
+from database.repository import (
+    get_market_data,
+    get_model_results,
+    get_predictions
+)
 
 
-DATABASE_PATH = "database/stock_analysis.db"
+def main():
+
+    print("=" * 60)
+    print("DATABASE VERIFICATION")
+    print("=" * 60)
+
+    # Market data
+    market_data = get_market_data("AAPL")
+
+    print("\n1. MARKET DATA")
+    print(f"Rows: {len(market_data)}")
+    print(market_data.head())
+
+    # Model results
+    model_results = get_model_results("AAPL")
+
+    print("\n2. MODEL RESULTS")
+    print(f"Rows: {len(model_results)}")
+    print(model_results)
+
+    # Predictions
+    predictions = get_predictions("AAPL")
+
+    print("\n3. PREDICTIONS")
+    print(f"Rows: {len(predictions)}")
+    print(predictions)
+
+    print("\n" + "=" * 60)
+    print("DATABASE VERIFICATION COMPLETED")
+    print("=" * 60)
 
 
-def get_connection():
-    """
-    Create and return a SQLite database connection.
-    """
-
-    database_directory = os.path.dirname(DATABASE_PATH)
-
-    if database_directory:
-        os.makedirs(
-            database_directory,
-            exist_ok=True
-        )
-
-    connection = sqlite3.connect(
-        DATABASE_PATH
-    )
-
-    connection.row_factory = sqlite3.Row
-
-    return connection
-
-
-def execute_query(query, parameters=()):
-    """
-    Execute a single INSERT, UPDATE, or DELETE query.
-    """
-
-    connection = get_connection()
-
-    try:
-        cursor = connection.cursor()
-
-        cursor.execute(
-            query,
-            parameters
-        )
-
-        connection.commit()
-
-        return cursor.lastrowid
-
-    finally:
-        connection.close()
-
-
-def fetch_all(query, parameters=()):
-    """
-    Execute a SELECT query and return all rows.
-    """
-
-    connection = get_connection()
-
-    try:
-        cursor = connection.cursor()
-
-        cursor.execute(
-            query,
-            parameters
-        )
-
-        return cursor.fetchall()
-
-    finally:
-        connection.close()
-
-
-def fetch_one(query, parameters=()):
-    """
-    Execute a SELECT query and return one row.
-    """
-
-    connection = get_connection()
-
-    try:
-        cursor = connection.cursor()
-
-        cursor.execute(
-            query,
-            parameters
-        )
-
-        return cursor.fetchone()
-
-    finally:
-        connection.close()
+if __name__ == "__main__":
+    main()
