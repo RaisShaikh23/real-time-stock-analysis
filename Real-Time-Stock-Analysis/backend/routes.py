@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from backend.service import refresh_predictions
 from database.repository import (
     get_market_data,
     get_model_results,
@@ -111,4 +112,29 @@ def train_models(symbol: str = "AAPL"):
         raise HTTPException(
             status_code=500,
             detail=f"Model training failed: {str(error)}"
+        )
+
+@router.post("/refresh")
+def refresh(symbol: str = "AAPL"):
+    symbol = symbol.upper()
+
+    if symbol != "AAPL":
+        raise HTTPException(
+            status_code=400,
+            detail="Currently only AAPL is supported."
+        )
+
+    try:
+        result = refresh_predictions(symbol)
+
+        return {
+            "status": "success",
+            "message": f"Predictions refreshed successfully for {symbol}.",
+            **result
+        }
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Refresh failed: {str(error)}"
         )
