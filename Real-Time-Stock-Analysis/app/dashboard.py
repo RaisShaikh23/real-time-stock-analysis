@@ -1,6 +1,8 @@
 import requests
 import pandas as pd
 import streamlit as st
+import plotly.graph_objects as go
+import plotly.express as px
 
 
 # ============================================================
@@ -15,17 +17,51 @@ API_URL = "http://127.0.0.1:8000"
 # ============================================================
 
 st.set_page_config(
-    page_title="Real-Time Stock Analysis Dashboard",
+    page_title="Real-Time Stock Analysis",
     page_icon="📈",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 
 # ============================================================
-# HELPER FUNCTIONS
+# CUSTOM CSS
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+
+    .main-title {
+        font-size: 2.3rem;
+        font-weight: 700;
+        margin-bottom: 0.2rem;
+    }
+
+    .subtitle {
+        color: #6b7280;
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-top: 1.5rem;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# API FUNCTIONS
 # ============================================================
 
 def get_stock_data(symbol):
+
     response = requests.get(
         f"{API_URL}/stocks/{symbol}/data",
         timeout=30
@@ -39,6 +75,7 @@ def get_stock_data(symbol):
 
 
 def get_model_results(symbol):
+
     response = requests.get(
         f"{API_URL}/models",
         params={"symbol": symbol},
@@ -53,6 +90,7 @@ def get_model_results(symbol):
 
 
 def get_predictions(symbol):
+
     response = requests.get(
         f"{API_URL}/prediction",
         params={"symbol": symbol},
@@ -67,6 +105,7 @@ def get_predictions(symbol):
 
 
 def refresh_predictions(symbol):
+
     response = requests.post(
         f"{API_URL}/refresh",
         params={"symbol": symbol},
@@ -82,13 +121,16 @@ def refresh_predictions(symbol):
 # HEADER
 # ============================================================
 
-st.title("📈 Real-Time Stock Analysis & Prediction Dashboard")
+st.markdown(
+    '<div class="main-title">📈 Real-Time Stock Analysis & Prediction Dashboard</div>',
+    unsafe_allow_html=True
+)
 
 st.markdown(
-    """
-    **Stock analysis, machine learning predictions, model evaluation,
-    and multi-horizon forecasting in one dashboard.**
-    """
+    '<div class="subtitle">'
+    'Market analysis • Machine learning • Multi-horizon forecasting • Model evaluation'
+    '</div>',
+    unsafe_allow_html=True
 )
 
 
@@ -96,7 +138,7 @@ st.markdown(
 # SIDEBAR
 # ============================================================
 
-st.sidebar.header("Dashboard Controls")
+st.sidebar.title("⚙️ Dashboard Controls")
 
 symbol = st.sidebar.text_input(
     "Stock Symbol",
@@ -105,39 +147,48 @@ symbol = st.sidebar.text_input(
 
 st.sidebar.markdown("---")
 
+st.sidebar.caption("Prediction Controls")
+
 refresh_button = st.sidebar.button(
     "🔄 Refresh Predictions",
     use_container_width=True
 )
 
+st.sidebar.markdown("---")
+
+st.sidebar.info(
+    "Backend API:\n"
+    "http://127.0.0.1:8000"
+)
+
 
 # ============================================================
-# REFRESH PREDICTIONS
+# REFRESH
 # ============================================================
 
 if refresh_button:
 
-    with st.spinner("Generating new predictions..."):
+    with st.spinner("Generating predictions using saved models..."):
 
         try:
 
-            result = refresh_predictions(symbol)
+            refresh_predictions(symbol)
 
-            st.sidebar.success(
-                "Predictions refreshed successfully!"
+            st.success(
+                f"Predictions refreshed successfully for {symbol}."
             )
 
-            st.session_state["refresh_result"] = result
+            st.rerun()
 
         except requests.exceptions.RequestException as error:
 
-            st.sidebar.error(
+            st.error(
                 f"API request failed: {error}"
             )
 
         except Exception as error:
 
-            st.sidebar.error(
+            st.error(
                 f"Refresh failed: {error}"
             )
 
@@ -155,8 +206,8 @@ try:
 except requests.exceptions.ConnectionError:
 
     st.error(
-        "❌ Could not connect to FastAPI.\n\n"
-        "Make sure the backend is running with:\n\n"
+        "❌ Cannot connect to FastAPI.\n\n"
+        "Start the backend with:\n\n"
         "`uvicorn backend.api:app --reload`"
     )
 
@@ -164,13 +215,17 @@ except requests.exceptions.ConnectionError:
 
 except requests.exceptions.HTTPError as error:
 
-    st.error(f"API returned an error: {error}")
+    st.error(
+        f"FastAPI returned an error: {error}"
+    )
 
     st.stop()
 
 except Exception as error:
 
-    st.error(f"Unexpected error: {error}")
+    st.error(
+        f"Unexpected error: {error}"
+    )
 
     st.stop()
 
@@ -179,9 +234,14 @@ except Exception as error:
 # PREPARE STOCK DATA
 # ============================================================
 
-stock_data["date"] = pd.to_datetime(stock_data["date"])
+stock_data["date"] = pd.to_datetime(
+    stock_data["date"]
+)
 
-stock_data = stock_data.sort_values("date")
+stock_data = stock_data.sort_values(
+    "date"
+).reset_index(drop=True)
+
 
 stock_data["daily_return"] = (
     stock_data["close"].pct_change() * 100
@@ -216,17 +276,25 @@ stock_data["sma_200"] = (
 # MARKET OVERVIEW
 # ============================================================
 
-st.header("📊 Market Overview")
+st.markdown(
+    '<div class="section-title">📊 Market Overview</div>',
+    unsafe_allow_html=True
+)
 
 latest = stock_data.iloc[-1]
 
-previous_close = (
-    stock_data.iloc[-2]["close"]
-    if len(stock_data) > 1
-    else latest["close"]
-)
+if len(stock_data) > 1:
 
-price_change = latest["close"] - previous_close
+    previous_close = stock_data.iloc[-2]["close"]
+
+else:
+
+    previous_close = latest["close"]
+
+
+price_change = (
+    latest["close"] - previous_close
+)
 
 price_change_percentage = (
     price_change / previous_close * 100
@@ -235,34 +303,39 @@ price_change_percentage = (
 
 col1, col2, col3, col4, col5 = st.columns(5)
 
+
 with col1:
 
     st.metric(
         "Latest Price",
-        f"${latest['close']:.2f}"
+        f"${latest['close']:.2f}",
+        f"{price_change_percentage:+.2f}%"
     )
+
 
 with col2:
-
-    st.metric(
-        "Daily Change",
-        f"${price_change:.2f}",
-        f"{price_change_percentage:.2f}%"
-    )
-
-with col3:
 
     st.metric(
         "Open",
         f"${latest['open']:.2f}"
     )
 
+
+with col3:
+
+    st.metric(
+        "Day High",
+        f"${latest['high']:.2f}"
+    )
+
+
 with col4:
 
     st.metric(
-        "High",
-        f"${latest['high']:.2f}"
+        "Day Low",
+        f"${latest['low']:.2f}"
     )
+
 
 with col5:
 
@@ -273,101 +346,277 @@ with col5:
 
 
 st.caption(
-    f"Latest available market date: "
+    f"Symbol: {symbol} | "
+    f"Latest available date: "
     f"{latest['date'].strftime('%Y-%m-%d')}"
 )
 
 
 # ============================================================
-# PRICE CHART
+# PRICE + MOVING AVERAGES
 # ============================================================
 
-st.subheader("Stock Price")
+st.markdown(
+    '<div class="section-title">📈 Price Analysis</div>',
+    unsafe_allow_html=True
+)
 
-price_chart_data = stock_data.set_index("date")[
-    ["close"]
-]
 
-st.line_chart(
-    price_chart_data,
-    y="close"
+fig_price = go.Figure()
+
+fig_price.add_trace(
+    go.Scatter(
+        x=stock_data["date"],
+        y=stock_data["close"],
+        mode="lines",
+        name="Close"
+    )
+)
+
+fig_price.add_trace(
+    go.Scatter(
+        x=stock_data["date"],
+        y=stock_data["sma_20"],
+        mode="lines",
+        name="SMA 20"
+    )
+)
+
+fig_price.add_trace(
+    go.Scatter(
+        x=stock_data["date"],
+        y=stock_data["sma_50"],
+        mode="lines",
+        name="SMA 50"
+    )
+)
+
+fig_price.add_trace(
+    go.Scatter(
+        x=stock_data["date"],
+        y=stock_data["sma_200"],
+        mode="lines",
+        name="SMA 200"
+    )
+)
+
+fig_price.update_layout(
+    title=f"{symbol} Close Price and Moving Averages",
+    xaxis_title="Date",
+    yaxis_title="Price",
+    hovermode="x unified",
+    height=500
+)
+
+st.plotly_chart(
+    fig_price,
+    use_container_width=True
 )
 
 
 # ============================================================
-# MOVING AVERAGES
+# CANDLESTICK CHART
 # ============================================================
 
-st.subheader("Moving Averages")
+st.subheader("🕯️ OHLC Price Chart")
 
-moving_average_data = stock_data.set_index("date")[
-    [
-        "close",
-        "sma_20",
-        "sma_50",
-        "sma_200"
+fig_candle = go.Figure(
+    data=[
+        go.Candlestick(
+            x=stock_data["date"],
+            open=stock_data["open"],
+            high=stock_data["high"],
+            low=stock_data["low"],
+            close=stock_data["close"],
+            name=symbol
+        )
     ]
-]
+)
 
-st.line_chart(moving_average_data)
+fig_candle.update_layout(
+    title=f"{symbol} OHLC",
+    xaxis_title="Date",
+    yaxis_title="Price",
+    xaxis_rangeslider_visible=False,
+    height=500
+)
+
+st.plotly_chart(
+    fig_candle,
+    use_container_width=True
+)
 
 
 # ============================================================
 # VOLUME
 # ============================================================
 
-st.subheader("Trading Volume")
+st.subheader("📊 Trading Volume")
 
-volume_data = stock_data.set_index("date")[
-    ["volume"]
-]
+fig_volume = px.bar(
+    stock_data,
+    x="date",
+    y="volume",
+    title=f"{symbol} Trading Volume"
+)
 
-st.bar_chart(volume_data)
+fig_volume.update_layout(
+    xaxis_title="Date",
+    yaxis_title="Volume",
+    height=400
+)
+
+st.plotly_chart(
+    fig_volume,
+    use_container_width=True
+)
 
 
 # ============================================================
 # AUTOMATED EDA
 # ============================================================
 
-st.header("🔍 Automated EDA")
+st.markdown(
+    '<div class="section-title">🔍 Automated EDA</div>',
+    unsafe_allow_html=True
+)
+
 
 eda_col1, eda_col2 = st.columns(2)
 
+
+# ------------------------------------------------------------
+# Daily Returns
+# ------------------------------------------------------------
 
 with eda_col1:
 
     st.subheader("Daily Returns")
 
-    returns_data = stock_data.set_index("date")[
-        ["daily_return"]
-    ]
+    fig_returns = px.line(
+        stock_data,
+        x="date",
+        y="daily_return",
+        title="Daily Percentage Returns"
+    )
 
-    st.line_chart(returns_data)
+    fig_returns.update_layout(
+        xaxis_title="Date",
+        yaxis_title="Return (%)",
+        height=400
+    )
 
+    st.plotly_chart(
+        fig_returns,
+        use_container_width=True
+    )
+
+
+# ------------------------------------------------------------
+# Rolling Volatility
+# ------------------------------------------------------------
 
 with eda_col2:
 
     st.subheader("20-Day Rolling Volatility")
 
-    volatility_data = stock_data.set_index("date")[
-        ["rolling_volatility_20"]
-    ]
+    fig_volatility = px.line(
+        stock_data,
+        x="date",
+        y="rolling_volatility_20",
+        title="20-Day Rolling Volatility"
+    )
 
-    st.line_chart(volatility_data)
+    fig_volatility.update_layout(
+        xaxis_title="Date",
+        yaxis_title="Volatility (%)",
+        height=400
+    )
+
+    st.plotly_chart(
+        fig_volatility,
+        use_container_width=True
+    )
+
+
+# ============================================================
+# RETURN DISTRIBUTION
+# ============================================================
+
+st.subheader("📊 Daily Return Distribution")
+
+return_values = stock_data[
+    "daily_return"
+].dropna()
+
+fig_distribution = px.histogram(
+    return_values,
+    nbins=50,
+    title="Distribution of Daily Returns"
+)
+
+fig_distribution.update_layout(
+    xaxis_title="Daily Return (%)",
+    yaxis_title="Frequency",
+    height=400
+)
+
+st.plotly_chart(
+    fig_distribution,
+    use_container_width=True
+)
+
+
+# ============================================================
+# CORRELATION MATRIX
+# ============================================================
+
+st.subheader("🔗 OHLCV Correlation")
+
+correlation_data = stock_data[
+    [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+    ]
+].corr()
+
+fig_correlation = px.imshow(
+    correlation_data,
+    text_auto=".2f",
+    aspect="auto",
+    title="Correlation Matrix"
+)
+
+fig_correlation.update_layout(
+    height=500
+)
+
+st.plotly_chart(
+    fig_correlation,
+    use_container_width=True
+)
 
 
 # ============================================================
 # MODEL COMPARISON
 # ============================================================
 
-st.header("🤖 Model Comparison")
+st.markdown(
+    '<div class="section-title">🤖 Model Comparison</div>',
+    unsafe_allow_html=True
+)
+
 
 if not model_data.empty:
 
     model_display = model_data.copy()
 
-    model_display["horizon"] = (
+    model_display["horizon_label"] = (
         model_display["horizon"]
+        .astype(int)
         .astype(str)
         + "-Day"
     )
@@ -383,6 +632,13 @@ if not model_data.empty:
         }
     )
 
+
+    # --------------------------------------------------------
+    # Model Table
+    # --------------------------------------------------------
+
+    st.subheader("Evaluation Metrics")
+
     st.dataframe(
         model_display[
             [
@@ -393,101 +649,352 @@ if not model_data.empty:
                 "RMSE",
                 "R²"
             ]
-        ],
+        ].round(4),
         use_container_width=True,
         hide_index=True
     )
 
+
+    # --------------------------------------------------------
+    # RMSE Comparison
+    # --------------------------------------------------------
+
+    st.subheader("RMSE Comparison")
+
+    fig_rmse = px.bar(
+        model_display,
+        x="Horizon",
+        y="RMSE",
+        color="Model",
+        barmode="group",
+        title="RMSE by Forecast Horizon"
+    )
+
+    fig_rmse.update_layout(
+        height=450
+    )
+
+    st.plotly_chart(
+        fig_rmse,
+        use_container_width=True
+    )
+
+
+    # --------------------------------------------------------
+    # MAE Comparison
+    # --------------------------------------------------------
+
+    st.subheader("MAE Comparison")
+
+    fig_mae = px.bar(
+        model_display,
+        x="Horizon",
+        y="MAE",
+        color="Model",
+        barmode="group",
+        title="MAE by Forecast Horizon"
+    )
+
+    fig_mae.update_layout(
+        height=450
+    )
+
+    st.plotly_chart(
+        fig_mae,
+        use_container_width=True
+    )
+
+
+    # --------------------------------------------------------
+    # R² Comparison
+    # --------------------------------------------------------
+
+    st.subheader("R² Comparison")
+
+    fig_r2 = px.bar(
+        model_display,
+        x="Horizon",
+        y="R²",
+        color="Model",
+        barmode="group",
+        title="R² by Forecast Horizon"
+    )
+
+    fig_r2.update_layout(
+        height=450
+    )
+
+    st.plotly_chart(
+        fig_r2,
+        use_container_width=True
+    )
+
+
 else:
 
-    st.info("No model evaluation results available.")
+    st.info(
+        "No model evaluation results available."
+    )
 
 
 # ============================================================
 # FORECAST SUMMARY
 # ============================================================
 
-st.header("🔮 Forecast Summary")
+st.markdown(
+    '<div class="section-title">🔮 Forecast Summary</div>',
+    unsafe_allow_html=True
+)
+
 
 if not prediction_data.empty:
 
-    prediction_display = prediction_data.copy()
+    prediction_data["forecast_date"] = pd.to_datetime(
+        prediction_data["forecast_date"]
+    )
 
-    prediction_display["horizon"] = (
-        prediction_display["horizon"]
+    prediction_data = prediction_data.sort_values(
+        "horizon"
+    )
+
+
+    # --------------------------------------------------------
+    # Forecast Cards
+    # --------------------------------------------------------
+
+    forecast_columns = st.columns(
+        min(4, len(prediction_data))
+    )
+
+
+    for index, (_, row) in enumerate(
+        prediction_data.iterrows()
+    ):
+
+        with forecast_columns[index]:
+
+            st.metric(
+                f"{int(row['horizon'])}-Day Forecast",
+                f"${row['predicted_price']:.2f}"
+            )
+
+            st.caption(
+                f"Model: {row['model']}"
+            )
+
+            st.caption(
+                f"Date: "
+                f"{row['forecast_date'].strftime('%Y-%m-%d')}"
+            )
+
+
+    # --------------------------------------------------------
+    # Forecast Table
+    # --------------------------------------------------------
+
+    st.subheader(
+        "Multi-Horizon Forecast Table"
+    )
+
+    forecast_table = prediction_data.copy()
+
+    forecast_table["Forecast Date"] = (
+        forecast_table["forecast_date"]
+        .dt.strftime("%Y-%m-%d")
+    )
+
+    forecast_table["Horizon"] = (
+        forecast_table["horizon"]
+        .astype(int)
         .astype(str)
         + "-Day"
     )
 
-    prediction_display["forecast_date"] = pd.to_datetime(
-        prediction_display["forecast_date"]
-    ).dt.strftime("%Y-%m-%d")
-
-    prediction_display = prediction_display.rename(
+    forecast_table = forecast_table.rename(
         columns={
-            "forecast_date": "Forecast Date",
-            "horizon": "Horizon",
             "model": "Model",
-            "predicted_price": "Predicted Price"
+            "predicted_price": "Predicted Price",
+            "actual_price": "Actual Price",
+            "absolute_error": "Absolute Error",
+            "error_percentage": "Error %"
         }
     )
 
     st.dataframe(
-        prediction_display[
+        forecast_table[
             [
                 "Forecast Date",
                 "Horizon",
                 "Model",
-                "Predicted Price"
+                "Predicted Price",
+                "Actual Price",
+                "Absolute Error",
+                "Error %"
             ]
-        ],
+        ].round(4),
         use_container_width=True,
         hide_index=True
     )
 
+
 else:
 
-    st.info("No predictions available.")
+    st.info(
+        "No predictions available."
+    )
 
 
 # ============================================================
-# FORECAST CARDS
+# ACTUAL VS PREDICTED
 # ============================================================
 
-st.subheader("Multi-Horizon Forecast")
+st.markdown(
+    '<div class="section-title">📈 Forecast Evaluation</div>',
+    unsafe_allow_html=True
+)
 
-forecast_columns = st.columns(4)
 
-for index, (_, row) in enumerate(
-    prediction_data.iterrows()
-):
+if not prediction_data.empty:
 
-    if index >= 4:
-        break
+    prediction_data["actual_price"] = pd.to_numeric(
+        prediction_data["actual_price"],
+        errors="coerce"
+    )
 
-    with forecast_columns[index]:
+    evaluation_data = prediction_data.dropna(
+        subset=["actual_price"]
+    ).copy()
 
-        st.metric(
-            f"{int(row['horizon'])}-Day Forecast",
-            f"${row['predicted_price']:.2f}"
+
+    if not evaluation_data.empty:
+
+        evaluation_data = evaluation_data.sort_values(
+            "forecast_date"
         )
 
-        st.caption(
-            f"Model: {row['model']}"
+
+        # ----------------------------------------------------
+        # Actual vs Predicted
+        # ----------------------------------------------------
+
+        st.subheader(
+            "Actual vs Predicted"
         )
 
-        st.caption(
-            f"Date: {row['forecast_date']}"
+        fig_actual = go.Figure()
+
+        fig_actual.add_trace(
+            go.Scatter(
+                x=evaluation_data["forecast_date"],
+                y=evaluation_data["actual_price"],
+                mode="lines+markers",
+                name="Actual"
+            )
+        )
+
+        fig_actual.add_trace(
+            go.Scatter(
+                x=evaluation_data["forecast_date"],
+                y=evaluation_data["predicted_price"],
+                mode="lines+markers",
+                name="Predicted"
+            )
+        )
+
+        fig_actual.update_layout(
+            title="Actual vs Predicted Price",
+            xaxis_title="Forecast Date",
+            yaxis_title="Price",
+            hovermode="x unified",
+            height=450
+        )
+
+        st.plotly_chart(
+            fig_actual,
+            use_container_width=True
+        )
+
+
+        # ----------------------------------------------------
+        # Forecast Error
+        # ----------------------------------------------------
+
+        st.subheader(
+            "Forecast Error"
+        )
+
+        error_data = evaluation_data.copy()
+
+        error_data["error"] = (
+            error_data["predicted_price"]
+            - error_data["actual_price"]
+        )
+
+        fig_error = px.bar(
+            error_data,
+            x="forecast_date",
+            y="error",
+            color="horizon",
+            title="Prediction Error"
+        )
+
+        fig_error.update_layout(
+            xaxis_title="Forecast Date",
+            yaxis_title="Prediction Error",
+            height=400
+        )
+
+        st.plotly_chart(
+            fig_error,
+            use_container_width=True
+        )
+
+
+    else:
+
+        st.info(
+            "Actual prices are not available yet. "
+            "Forecast error charts will appear when "
+            "future predictions have corresponding actual prices."
         )
 
 
 # ============================================================
-# FOOTER
+# SYSTEM INFORMATION
 # ============================================================
 
 st.markdown("---")
 
+st.subheader("ℹ️ System Information")
+
+info_col1, info_col2, info_col3 = st.columns(3)
+
+
+with info_col1:
+
+    st.metric(
+        "Historical Records",
+        f"{len(stock_data):,}"
+    )
+
+
+with info_col2:
+
+    st.metric(
+        "Models Evaluated",
+        f"{len(model_data):,}"
+    )
+
+
+with info_col3:
+
+    st.metric(
+        "Forecast Horizons",
+        f"{len(prediction_data):,}"
+    )
+
+
 st.caption(
     "Real-Time Stock Analysis & Prediction Dashboard | "
-    "FastAPI + SQLite + Machine Learning + Streamlit"
+    "FastAPI + SQLite + ARIMA + SARIMA + Prophet + XGBoost"
 )
