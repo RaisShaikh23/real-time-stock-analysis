@@ -271,7 +271,195 @@ stock_data["sma_200"] = (
     .mean()
 )
 
+# ============================================================
+# PREDICTION SUMMARY
+# ============================================================
 
+st.markdown(
+    '<div class="section-title">🔮 Multi-Horizon Predictions</div>',
+    unsafe_allow_html=True
+)
+
+if not prediction_data.empty and not stock_data.empty:
+
+    latest_close = float(
+        stock_data["close"].iloc[-1]
+    )
+
+    prediction_display = prediction_data.copy()
+
+    prediction_display["predicted_price"] = pd.to_numeric(
+        prediction_display["predicted_price"],
+        errors="coerce"
+    )
+
+    prediction_display["horizon"] = pd.to_numeric(
+        prediction_display["horizon"],
+        errors="coerce"
+    )
+
+    prediction_display = prediction_display.dropna(
+        subset=["predicted_price", "horizon"]
+    )
+
+    if not prediction_display.empty:
+
+        # ----------------------------------------------------
+        # Calculate price change
+        # ----------------------------------------------------
+
+        prediction_display["price_change"] = (
+            prediction_display["predicted_price"]
+            - latest_close
+        )
+
+        prediction_display["percentage_change"] = (
+            prediction_display["price_change"]
+            / latest_close
+        ) * 100
+
+        # ----------------------------------------------------
+        # Prediction cards
+        # ----------------------------------------------------
+
+        horizons = [1, 3, 10, 15]
+
+        available_predictions = (
+            prediction_display[
+                prediction_display["horizon"].isin(horizons)
+            ]
+            .sort_values("horizon")
+        )
+
+        columns = st.columns(4)
+
+        for column, (_, row) in zip(
+            columns,
+            available_predictions.iterrows()
+        ):
+
+            horizon = int(row["horizon"])
+            model = row["model"]
+            predicted_price = float(
+                row["predicted_price"]
+            )
+            price_change = float(
+                row["price_change"]
+            )
+            percentage_change = float(
+                row["percentage_change"]
+            )
+
+            with column:
+
+                st.metric(
+                    label=f"{horizon}-Day • {model}",
+                    value=f"${predicted_price:.2f}",
+                    delta=(
+                        f"{price_change:+.2f} "
+                        f"({percentage_change:+.2f}%)"
+                    )
+                )
+
+        st.caption(
+            f"Latest available close: ${latest_close:.2f}"
+        )
+
+    else:
+
+        st.info(
+            "No valid prediction values are available."
+        )
+
+else:
+
+    st.info(
+        "Prediction data is not available."
+    )
+
+# ============================================================
+# SELECTED MODEL BY HORIZON
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">🤖 Selected Model by Forecast Horizon</div>',
+    unsafe_allow_html=True
+)
+
+if not prediction_data.empty:
+
+    model_selection_display = prediction_data[
+        ["horizon", "model"]
+    ].copy()
+
+    model_selection_display = (
+        model_selection_display
+        .drop_duplicates()
+        .sort_values("horizon")
+    )
+
+    model_selection_display["horizon"] = (
+        model_selection_display["horizon"]
+        .astype(int)
+        .astype(str)
+        + "-Day"
+    )
+
+    model_selection_display.columns = [
+        "Forecast Horizon",
+        "Selected Model"
+    ]
+
+    st.dataframe(
+        model_selection_display,
+        use_container_width=True,
+        hide_index=True
+    )
+# ============================================================
+# FORECAST PRICE VISUALIZATION
+# ============================================================
+
+st.subheader("📈 Forecast Price by Horizon")
+
+if not prediction_display.empty:
+
+    forecast_chart = prediction_display.copy()
+
+    forecast_chart["forecast_label"] = (
+        forecast_chart["horizon"]
+        .astype(int)
+        .astype(str)
+        + "-Day"
+    )
+
+    fig_forecast = go.Figure()
+
+    fig_forecast.add_trace(
+        go.Scatter(
+            x=forecast_chart["forecast_label"],
+            y=forecast_chart["predicted_price"],
+            mode="lines+markers",
+            name="Predicted Price"
+        )
+    )
+
+    fig_forecast.add_hline(
+        y=latest_close,
+        line_dash="dash",
+        annotation_text="Latest Close"
+    )
+
+    fig_forecast.update_layout(
+        title="Current Price vs Multi-Horizon Forecast",
+        xaxis_title="Forecast Horizon",
+        yaxis_title="Price",
+        height=450
+    )
+
+    st.plotly_chart(
+        fig_forecast,
+        use_container_width=True
+    )
 # ============================================================
 # MARKET OVERVIEW
 # ============================================================
