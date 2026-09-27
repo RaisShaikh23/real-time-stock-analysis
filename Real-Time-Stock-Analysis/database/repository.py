@@ -173,6 +173,55 @@ def insert_predictions(data):
     finally:
         connection.close()
 
+def update_prediction_evaluation(
+    symbol,
+    forecast_date,
+    horizon,
+    model,
+    actual_price,
+    absolute_error,
+    error_percentage,
+):
+    """
+    Update a prediction with its actual market price
+    and calculated forecast errors.
+    """
+
+    connection = get_connection()
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            UPDATE predictions
+            SET
+                actual_price = ?,
+                absolute_error = ?,
+                error_percentage = ?
+            WHERE
+                symbol = ?
+                AND forecast_date = ?
+                AND horizon = ?
+                AND model = ?
+            """,
+            (
+                float(actual_price),
+                float(absolute_error),
+                float(error_percentage),
+                symbol.upper(),
+                str(forecast_date),
+                int(horizon),
+                model,
+            ),
+        )
+
+        connection.commit()
+
+        return cursor.rowcount
+
+    finally:
+        connection.close()
 
 def get_predictions(symbol="AAPL"):
     rows = fetch_all(
@@ -198,3 +247,82 @@ def get_predictions(symbol="AAPL"):
     )
 
     return pd.DataFrame([dict(row) for row in rows])
+
+def get_pending_predictions(symbol):
+    """
+    Retrieve predictions whose actual prices have not
+    been evaluated yet.
+    """
+
+    query = """
+        SELECT
+            symbol,
+            forecast_generated,
+            last_known_date,
+            last_known_close,
+            forecast_date,
+            horizon,
+            model,
+            predicted_price,
+            actual_price,
+            absolute_error,
+            error_percentage,
+            created_at
+        FROM predictions
+        WHERE symbol = ?
+          AND actual_price IS NULL
+        ORDER BY forecast_date ASC
+    """
+
+    with get_connection() as connection:
+        return pd.read_sql_query(
+            query,
+            connection,
+            params=(symbol.upper(),)
+        )
+def update_prediction_evaluation(
+    symbol,
+    forecast_date,
+    horizon,
+    model,
+    actual_price,
+    absolute_error,
+    error_percentage
+):
+    """
+    Update a prediction with its actual price and
+    calculated forecast errors.
+    """
+
+    query = """
+        UPDATE predictions
+        SET
+            actual_price = ?,
+            absolute_error = ?,
+            error_percentage = ?
+        WHERE symbol = ?
+          AND forecast_date = ?
+          AND horizon = ?
+          AND model = ?
+          AND actual_price IS NULL
+    """
+
+    with get_connection() as connection:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            query,
+            (
+                float(actual_price),
+                float(absolute_error),
+                float(error_percentage),
+                symbol.upper(),
+                str(forecast_date),
+                int(horizon),
+                model
+            )
+        )
+
+        connection.commit()
+
+        return cursor.rowcount

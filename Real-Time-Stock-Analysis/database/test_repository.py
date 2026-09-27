@@ -6,6 +6,7 @@ from database.repository import (
     get_market_data,
     get_model_results,
     get_predictions,
+    get_pending_predictions,
 )
 
 
@@ -116,3 +117,16 @@ def test_database_tables_exist():
     assert "market_data" in tables
     assert "model_results" in tables
     assert "predictions" in tables
+
+def test_get_pending_predictions():
+    result = get_pending_predictions("AAPL")
+
+    assert result is not None
+    assert len(result) >= 0
+
+    if len(result) > 0:
+        assert "forecast_date" in result.columns
+        assert "actual_price" in result.columns
+        assert "predicted_price" in result.columns
+
+        assert result["actual_price"].isna().all()
