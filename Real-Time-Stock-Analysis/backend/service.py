@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from prediction.pipeline import main as run_pipeline
+from prediction.pipeline import run_pipeline
 from database.schema import create_tables
 from database.repository import insert_predictions
 
