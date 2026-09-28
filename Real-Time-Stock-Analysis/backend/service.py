@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from prediction.predict import generate_predictions
+from prediction.pipeline import main as run_pipeline
 from database.schema import create_tables
 from database.repository import insert_predictions
 
@@ -21,32 +21,63 @@ def refresh_predictions(symbol="AAPL"):
             f"Feature dataset not found: {DATA_PATH}"
         )
 
-    # Make sure database tables exist
+    # ============================================================
+    # 1. Make sure database tables exist
+    # ============================================================
+
     create_tables()
 
-    # Generate fresh predictions using saved models
-    generate_predictions()
+    # ============================================================
+    # 2. Run complete prediction pipeline
+    #
+    #    This performs:
+    #    - Evaluation of pending predictions
+    #    - Generation of new predictions
+    # ============================================================
 
-    # Check prediction file
+    run_pipeline()
+
+    # ============================================================
+    # 3. Check prediction file
+    # ============================================================
+
     if not os.path.exists(PREDICTIONS_PATH):
         raise FileNotFoundError(
             f"Prediction file not found: {PREDICTIONS_PATH}"
         )
 
-    # Load generated predictions
-    predictions = pd.read_csv(PREDICTIONS_PATH)
+    # ============================================================
+    # 4. Load generated predictions
+    # ============================================================
 
-    # Insert predictions into SQLite
+    predictions = pd.read_csv(
+        PREDICTIONS_PATH
+    )
+
+    # ============================================================
+    # 5. Insert new predictions into SQLite
+    # ============================================================
+
     insert_predictions(predictions)
 
-    # Convert DataFrame to JSON-safe records.
-    # NaN -> None, which becomes JSON null.
-    records = predictions.to_dict(orient="records")
+    # ============================================================
+    # 6. Convert DataFrame to JSON-safe records
+    #    NaN -> None -> JSON null
+    # ============================================================
+
+    records = predictions.to_dict(
+        orient="records"
+    )
 
     for record in records:
         for key, value in record.items():
+
             if pd.isna(value):
                 record[key] = None
+
+    # ============================================================
+    # 7. Return API response
+    # ============================================================
 
     return {
         "symbol": symbol,
