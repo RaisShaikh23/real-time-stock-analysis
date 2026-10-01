@@ -7,8 +7,19 @@ from database.database import (
     fetch_one
 )
 
-
 def insert_market_data(data, symbol):
+    data = data.copy()
+
+    # If Date is stored as the DataFrame index,
+    # convert it into a normal column.
+    if "Date" not in data.columns:
+        data = data.reset_index()
+
+        # Depending on the original index name,
+        # reset_index() may create "index" instead of "Date".
+        if "Date" not in data.columns and "index" in data.columns:
+            data = data.rename(columns={"index": "Date"})
+
     for _, row in data.iterrows():
         execute_query(
             """
@@ -26,7 +37,7 @@ def insert_market_data(data, symbol):
             """,
             (
                 symbol.upper(),
-                row["Date"],
+                str(row["Date"].date()),
                 row["Open"],
                 row["High"],
                 row["Low"],
@@ -34,8 +45,6 @@ def insert_market_data(data, symbol):
                 row["Volume"]
             )
         )
-
-
 def get_market_data(symbol="AAPL"):
     rows = fetch_all(
         """
@@ -56,7 +65,18 @@ def get_market_data(symbol="AAPL"):
 
     return pd.DataFrame([dict(row) for row in rows])
 
+def parse_horizon(value):
+    """
+    Convert horizon values such as:
+    1, 1-Day, 3-Day, 10-Day, 15-Day
+    into integer values.
+    """
+    if isinstance(value, (int, float)):
+        return int(value)
 
+    value = str(value).strip()
+
+    return int(value.split("-")[0])
 def insert_model_results(data):
     for _, row in data.iterrows():
         execute_query(
@@ -77,7 +97,7 @@ def insert_model_results(data):
             (
                 "AAPL",
                 row["Model"],
-                int(row["Horizon"]),
+                int(str(row["Horizon"]).split("-")[0]),
                 row["MAE"],
                 row["MSE"],
                 row["RMSE"],

@@ -41,6 +41,10 @@ def main():
         parse_dates=True
     )
 
+    # Convert the Date index back into a normal column
+    market_data = market_data.reset_index()
+    market_data = market_data.rename(columns={"index": "Date"})
+
     insert_market_data(
         market_data,
         symbol="AAPL"
