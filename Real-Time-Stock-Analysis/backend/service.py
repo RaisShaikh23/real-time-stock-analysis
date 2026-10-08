@@ -1,86 +1,96 @@
 import os
 import pandas as pd
 
-from prediction.pipeline import run_pipeline
+from data.update_pipeline import update_market_pipeline
+from prediction.evaluate_predictions import evaluate_predictions
+from prediction.predict import generate_predictions
+
 from database.schema import create_tables
-from database.repository import insert_predictions
+from database.repository import insert_market_data, insert_predictions
 
 
-DATA_PATH = "data/processed/AAPL_features.csv"
+DATA_PATH = "data/processed/AAPL.csv"
 PREDICTIONS_PATH = "reports/predictions/AAPL_predictions.csv"
 
 
 def refresh_predictions(symbol="AAPL"):
-    symbol = symbol.upper()
+    symbol = symbol.strip().upper()
 
     if symbol != "AAPL":
         raise ValueError("Currently only AAPL is supported.")
 
-    if not os.path.exists(DATA_PATH):
-        raise FileNotFoundError(
-            f"Feature dataset not found: {DATA_PATH}"
-        )
+    print("=" * 60)
+    print("STARTING FULL MARKET REFRESH")
+    print("=" * 60)
 
-    # ============================================================
-    # 1. Make sure database tables exist
-    # ============================================================
+    # ---------------------------------------------------------
+    # STEP 1: Update market data, preprocessing, features
+    # ---------------------------------------------------------
+    print("\n[1/4] Updating market data pipeline...")
+
+    update_result = update_market_pipeline(symbol)
+
+    # ---------------------------------------------------------
+    # STEP 2: Update SQLite market data
+    # ---------------------------------------------------------
+    print("\n[2/4] Updating database market data...")
 
     create_tables()
 
-    # ============================================================
-    # 2. Run complete prediction pipeline
-    #
-    #    This performs:
-    #    - Evaluation of pending predictions
-    #    - Generation of new predictions
-    # ============================================================
+    market_data = pd.read_csv(
+        DATA_PATH,
+        index_col=0,
+        parse_dates=True
+    )
 
-    run_pipeline()
+    market_data = market_data.reset_index()
 
-    # ============================================================
-    # 3. Check prediction file
-    # ============================================================
+    insert_market_data(
+        market_data,
+        symbol=symbol
+    )
+
+    # ---------------------------------------------------------
+    # STEP 3: Evaluate previous predictions
+    # ---------------------------------------------------------
+    print("\n[3/4] Evaluating previous predictions...")
+
+    evaluation_result = evaluate_predictions(
+        symbol=symbol
+    )
+
+    # ---------------------------------------------------------
+    # STEP 4: Generate new predictions
+    # ---------------------------------------------------------
+    print("\n[4/4] Generating new predictions...")
+
+    prediction_result = generate_predictions()
 
     if not os.path.exists(PREDICTIONS_PATH):
         raise FileNotFoundError(
             f"Prediction file not found: {PREDICTIONS_PATH}"
         )
 
-    # ============================================================
-    # 4. Load generated predictions
-    # ============================================================
-
-    predictions = pd.read_csv(
-        PREDICTIONS_PATH
-    )
-
-    # ============================================================
-    # 5. Insert new predictions into SQLite
-    # ============================================================
+    predictions = pd.read_csv(PREDICTIONS_PATH)
 
     insert_predictions(predictions)
 
-    # ============================================================
-    # 6. Convert DataFrame to JSON-safe records
-    #    NaN -> None -> JSON null
-    # ============================================================
-
-    records = predictions.to_dict(
-        orient="records"
-    )
+    # Convert NaN values to None for JSON response
+    records = predictions.to_dict(orient="records")
 
     for record in records:
         for key, value in record.items():
-
             if pd.isna(value):
                 record[key] = None
 
-    # ============================================================
-    # 7. Return API response
-    # ============================================================
+    print("\n" + "=" * 60)
+    print("FULL MARKET REFRESH COMPLETED")
+    print("=" * 60)
 
     return {
         "symbol": symbol,
+        "update": update_result,
+        "evaluation": evaluation_result,
         "prediction_rows": len(records),
-        "predictions": records
+        "predictions": records,
     }
