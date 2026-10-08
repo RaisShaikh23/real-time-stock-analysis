@@ -77,6 +77,8 @@ def parse_horizon(value):
     value = str(value).strip()
 
     return int(value.split("-")[0])
+
+
 def insert_model_results(data):
     for _, row in data.iterrows():
         execute_query(
@@ -97,7 +99,7 @@ def insert_model_results(data):
             (
                 "AAPL",
                 row["Model"],
-                int(str(row["Horizon"]).split("-")[0]),
+                parse_horizon(row["Horizon"]),
                 row["MAE"],
                 row["MSE"],
                 row["RMSE"],
@@ -130,68 +132,139 @@ def get_model_results(symbol="AAPL"):
     return pd.DataFrame([dict(row) for row in rows])
 
 
-def insert_predictions(data):
+def insert_predictions(predictions):
+    """
+    Insert predictions into the database.
+
+    If a prediction with the same:
+        symbol + forecast_date + horizon + model
+
+    already exists, update that existing prediction instead
+    of creating a duplicate row.
+    """
+
     connection = get_connection()
+    cursor = connection.cursor()
+
+    inserted = 0
+    updated = 0
 
     try:
-        cursor = connection.cursor()
+        for _, row in predictions.iterrows():
 
-        for _, row in data.iterrows():
+            symbol = str(row["symbol"]).upper()
+            forecast_generated = row["forecast_generated"]
+            last_known_date = row["last_known_date"]
+            last_known_close = row["last_known_close"]
+            forecast_date = row["forecast_date"]
+            horizon = int(row["horizon"])
+            model = row["model"]
+            predicted_price = row["predicted_price"]
+            actual_price = row["actual_price"]
+            absolute_error = row["absolute_error"]
+            error_percentage = row["error_percentage"]
+            created_at = row["created_at"]
 
-            # Remove an existing prediction with the same
-            # symbol + forecast date + horizon.
+            # Check whether this prediction already exists
             cursor.execute(
                 """
-                DELETE FROM predictions
+                SELECT id
+                FROM predictions
                 WHERE symbol = ?
                   AND forecast_date = ?
                   AND horizon = ?
+                  AND model = ?
                 """,
                 (
-                    row["Symbol"],
-                    row["Forecast_Date"],
-                    int(row["Horizon"])
+                    symbol,
+                    str(forecast_date),
+                    horizon,
+                    model
                 )
             )
 
-            # Insert the latest prediction.
-            cursor.execute(
-                """
-                INSERT INTO predictions
-                (
-                    symbol,
-                    forecast_generated,
-                    last_known_date,
-                    last_known_close,
-                    forecast_date,
-                    horizon,
-                    model,
-                    predicted_price,
-                    actual_price,
-                    absolute_error,
-                    error_percentage
+            existing = cursor.fetchone()
+
+            if existing:
+
+                cursor.execute(
+                    """
+                    UPDATE predictions
+                    SET forecast_generated = ?,
+                        last_known_date = ?,
+                        last_known_close = ?,
+                        predicted_price = ?,
+                        actual_price = ?,
+                        absolute_error = ?,
+                        error_percentage = ?,
+                        created_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        str(forecast_generated),
+                        str(last_known_date),
+                        last_known_close,
+                        predicted_price,
+                        actual_price,
+                        absolute_error,
+                        error_percentage,
+                        str(created_at),
+                        existing[0]
+                    )
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    row["Symbol"],
-                    row["Forecast_Generated"],
-                    row["Last_Known_Date"],
-                    row["Last_Known_Close"],
-                    row["Forecast_Date"],
-                    int(row["Horizon"]),
-                    row["Model"],
-                    row["Predicted_Price"],
-                    row["Actual_Price"],
-                    row["Absolute_Error"],
-                    row["Error_Percentage"]
+
+                updated += 1
+
+            else:
+
+                cursor.execute(
+                    """
+                    INSERT INTO predictions (
+                        symbol,
+                        forecast_generated,
+                        last_known_date,
+                        last_known_close,
+                        forecast_date,
+                        horizon,
+                        model,
+                        predicted_price,
+                        actual_price,
+                        absolute_error,
+                        error_percentage,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        symbol,
+                        str(forecast_generated),
+                        str(last_known_date),
+                        last_known_close,
+                        str(forecast_date),
+                        horizon,
+                        model,
+                        predicted_price,
+                        actual_price,
+                        absolute_error,
+                        error_percentage,
+                        str(created_at)
+                    )
                 )
-            )
+
+                inserted += 1
 
         connection.commit()
 
     finally:
         connection.close()
+
+    print(f"Prediction rows inserted: {inserted}")
+    print(f"Prediction rows updated: {updated}")
+
+    return {
+        "inserted": inserted,
+        "updated": updated
+    }
 
 def update_prediction_evaluation(
     symbol,
